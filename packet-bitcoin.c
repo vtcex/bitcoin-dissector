@@ -38,6 +38,12 @@ static gint hf_msg_version_nonce = -1;
 static gint hf_msg_version_subver = -1;
 static gint hf_msg_version_start_height = -1;
 
+/* addr message */
+static gint hf_bitcoin_msg_addr = -1;
+static gint hf_msg_addr_count = -1;
+static gint hf_msg_addr_address = -1;
+static gint hf_msg_addr_timestamp = -1;
+
 /* services */
 static gint hf_services_network = -1;
 
@@ -50,6 +56,7 @@ static gint ett_bitcoin = -1;
 static gint ett_bitcoin_msg = -1;
 static gint ett_services = -1;
 static gint ett_address = -1;
+static gint ett_addr_list = -1;
 
 static guint get_bitcoin_pdu_length(packet_info *pinfo _U_, tvbuff_t *tvb, int offset)
 {
@@ -66,7 +73,7 @@ static guint get_bitcoin_pdu_length(packet_info *pinfo _U_, tvbuff_t *tvb, int o
   return length + tvb_get_letohl(tvb, offset+16);
 }
 
-static void create_services_tree(tvbuff_t *tvb, proto_item *ti, guint32 offset)
+static proto_tree *create_services_tree(tvbuff_t *tvb, proto_item *ti, guint32 offset)
 {
   proto_tree *tree;
   guint64 services;
@@ -85,9 +92,11 @@ static void create_services_tree(tvbuff_t *tvb, proto_item *ti, guint32 offset)
   proto_tree_add_boolean(tree, hf_services_network, tvb, offset, 4, (guint32)services);
 
   /* end of services */
+
+  return tree;
 }
 
-static void create_address_tree(tvbuff_t *tvb, proto_item *ti, guint32 offset)
+static proto_tree *create_address_tree(tvbuff_t *tvb, proto_item *ti, guint32 offset)
 {
   proto_tree *tree;
 
@@ -104,6 +113,37 @@ static void create_address_tree(tvbuff_t *tvb, proto_item *ti, guint32 offset)
 
   /* port */
   proto_tree_add_item(tree, hf_address_port, tvb, offset, 2, TRUE); 
+
+  return tree;
+}
+
+static guint64 tvb_get_varint(tvbuff_t *tvb, const gint offset, gint *length)
+{
+  guint64 value;
+
+  /* calculate variable length */
+  value = tvb_get_guint8(tvb, offset);
+  if(value < 0xfd)
+  {
+    *length = 1;
+    return value;
+  }
+
+  if(value == 0xfd)
+  {
+    *length = 3;
+    return tvb_get_letohs(tvb, offset+1);
+  }
+  else if(value == 0xfe)
+  {
+    *length = 5;
+    return tvb_get_letohl(tvb, offset+1);
+  }
+  else
+  {
+    *length = 9;
+    return tvb_get_letoh64(tvb, offset+1);
+  }
 }
 
 static void dissect_bitcoin_msg_version(tvbuff_t *tvb, packet_info *pinfo, 
@@ -155,9 +195,38 @@ static void dissect_bitcoin_msg_version(tvbuff_t *tvb, packet_info *pinfo,
   }
 }
 
+static void dissect_bitcoin_msg_addr(tvbuff_t *tvb, packet_info *pinfo, 
+    proto_tree *tree, guint32 offset)
+{
+  proto_item *ti;
+  gint count_length;
+  guint64 count;
+
+  ti = proto_tree_add_item(tree, hf_bitcoin_msg_addr, tvb, offset, -1, FALSE);
+  tree = proto_item_add_subtree(ti, ett_bitcoin_msg);
+  
+  count = tvb_get_varint(tvb, offset, &count_length);
+  proto_tree_add_text(tree, tvb, offset, count_length, 
+      "Count: %llu", (long long unsigned int)count); 
+  offset += count_length;
+
+  for(; count > 0; count--)
+  {
+    proto_tree *subtree;
+
+    ti = proto_tree_add_item(tree, hf_msg_addr_address, tvb, offset, 30, FALSE);
+    subtree = create_address_tree(tvb, ti, offset+4);
+
+    proto_tree_add_item(subtree, hf_msg_addr_timestamp, tvb, offset, 4, TRUE);
+    offset += 26;
+    offset += 4;
+  }
+}
+
 
 typedef void (*msg_dissector_func_t)(tvbuff_t *tvb, packet_info *pinfo, 
     proto_tree *tree, guint32 offset);
+
 typedef struct msg_dissector
 { 
   const gchar *command;
@@ -166,7 +235,8 @@ typedef struct msg_dissector
 
 static msg_dissector_t msg_dissectors[] =
 {
-  {"version", dissect_bitcoin_msg_version}
+  {"version", dissect_bitcoin_msg_version},
+  {"addr", dissect_bitcoin_msg_addr}
 };
 
 static void dissect_bitcoin_tcp_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
@@ -239,6 +309,8 @@ void proto_register_bitoin()
     { &hf_bitcoin_checksum,
       { "Payload checksum", "bitcoin.checksum", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }
     },
+
+    /* version message */
     { &hf_bitcoin_msg_version,
       { "Version message", "bitcoin.version", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }
     },
@@ -252,10 +324,10 @@ void proto_register_bitoin()
       { "Address of emmitting node", "bitcoin.version.addr_me", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }
     }, 
     { &hf_msg_version_addr_you,
-      { "Address seend by the emitting node", "bitcoin.version.addr_you", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }
+      { "Address as seen by the emitting node", "bitcoin.version.addr_you", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }
     }, 
     { &hf_msg_version_timestamp,
-      { "Node timestamp", "bitcoin.version.timestamp", FT_UINT64, BASE_DEC, NULL, 0x0, NULL, HFILL }
+      { "Node timestamp", "bitcoin.version.timestamp", FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x0, NULL, HFILL }
     },
     { &hf_msg_version_nonce,
       { "Random nonce", "bitcoin.version.nonce", FT_UINT64, BASE_HEX, NULL, 0x0, NULL, HFILL }
@@ -266,6 +338,18 @@ void proto_register_bitoin()
     { &hf_msg_version_start_height,
       { "Block start height", "bitcoin.version.start_height", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
     },
+
+    /* addr message */
+    { &hf_bitcoin_msg_addr,
+      { "Address message", "bitcoin.addr", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }
+    },
+    { &hf_msg_addr_address,
+      { "Address", "bitcoin.addr.address", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_addr_timestamp,
+      { "Address timestamp", "bitcoin.addr.timestamp", FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x0, NULL, HFILL }
+    }, 
+
 
     /* services */
     { &hf_services_network,
@@ -288,7 +372,8 @@ void proto_register_bitoin()
     &ett_bitcoin,
     &ett_bitcoin_msg,
     &ett_services,
-    &ett_address
+    &ett_address,
+    &ett_addr_list
   };
 
   proto_bitcoin = proto_register_protocol( "Bitcoin protocol", "Bitcoin",
