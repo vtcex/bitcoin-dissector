@@ -77,6 +77,15 @@ static gint hf_msg_tx_out_value = -1;
 static gint hf_msg_tx_out_script = -1;
 static gint hf_msg_tx_lock_time = -1;
 
+/* block message */
+static gint hf_bitcoin_msg_block = -1;
+static gint hf_msg_block_version = -1;
+static gint hf_msg_block_prev_block = -1;
+static gint hf_msg_block_merkle_root = -1;
+static gint hf_msg_block_time = -1;
+static gint hf_msg_block_bits = -1;
+static gint hf_msg_block_nonce = -1;
+
 /* services */
 static gint hf_services_network = -1;
 
@@ -209,7 +218,7 @@ static guint64 tvb_get_varint(tvbuff_t *tvb, const gint offset, gint *length)
 /**
  * Handler for version messages
  */
-static void dissect_bitcoin_msg_version(tvbuff_t *tvb, packet_info *pinfo _U_, 
+static guint32 dissect_bitcoin_msg_version(tvbuff_t *tvb, packet_info *pinfo _U_, 
     proto_tree *tree, guint32 offset)
 {
   proto_item *ti;
@@ -256,12 +265,14 @@ static void dissect_bitcoin_msg_version(tvbuff_t *tvb, packet_info *pinfo _U_,
       offset += 4;
     }
   }
+
+  return offset;
 }
 
 /**
  * Handler for address messages
  */
-static void dissect_bitcoin_msg_addr(tvbuff_t *tvb, packet_info *pinfo _U_, 
+static guint32 dissect_bitcoin_msg_addr(tvbuff_t *tvb, packet_info *pinfo _U_, 
     proto_tree *tree, guint32 offset)
 {
   proto_item *ti;
@@ -287,12 +298,14 @@ static void dissect_bitcoin_msg_addr(tvbuff_t *tvb, packet_info *pinfo _U_,
     offset += 26;
     offset += 4;
   }
+
+  return offset;
 }
 
 /**
  * Handler for inventory messages
  */
-static void dissect_bitcoin_msg_inv(tvbuff_t *tvb, packet_info *pinfo _U_,
+static guint32 dissect_bitcoin_msg_inv(tvbuff_t *tvb, packet_info *pinfo _U_,
     proto_tree *tree, guint32 offset)
 {
   proto_item *ti;
@@ -320,12 +333,14 @@ static void dissect_bitcoin_msg_inv(tvbuff_t *tvb, packet_info *pinfo _U_,
     proto_tree_add_item(subtree, hf_msg_inv_hash, tvb, offset, 32, TRUE);
     offset += 32;
   }
+
+  return offset;
 }
 
 /**
  * Handler for getdata messages
  */
-static void dissect_bitcoin_msg_getdata(tvbuff_t *tvb, packet_info *pinfo _U_,
+static guint32 dissect_bitcoin_msg_getdata(tvbuff_t *tvb, packet_info *pinfo _U_,
     proto_tree *tree, guint32 offset)
 {
   proto_item *ti;
@@ -353,12 +368,14 @@ static void dissect_bitcoin_msg_getdata(tvbuff_t *tvb, packet_info *pinfo _U_,
     proto_tree_add_item(subtree, hf_msg_getdata_hash, tvb, offset, 32, TRUE);
     offset += 32;
   }
+
+  return offset;
 }
 
 /**
  * Handler for getblocks messages
  */
-static void dissect_bitcoin_msg_getblocks(tvbuff_t *tvb, packet_info *pinfo _U_,
+static guint32 dissect_bitcoin_msg_getblocks(tvbuff_t *tvb, packet_info *pinfo _U_,
     proto_tree *tree, guint32 offset)
 {
   proto_item *ti;
@@ -384,13 +401,14 @@ static void dissect_bitcoin_msg_getblocks(tvbuff_t *tvb, packet_info *pinfo _U_,
   }
 
   proto_tree_add_item(tree, hf_msg_getblocks_stop, tvb, offset, 32, TRUE);
+  return offset + 32;
 }
 
 /**
  * Handler for getheaders messages
  * UNTESTED
  */
-static void dissect_bitcoin_msg_getheaders(tvbuff_t *tvb, packet_info *pinfo _U_,
+static guint32 dissect_bitcoin_msg_getheaders(tvbuff_t *tvb, packet_info *pinfo _U_,
     proto_tree *tree, guint32 offset)
 {
   proto_item *ti;
@@ -412,12 +430,13 @@ static void dissect_bitcoin_msg_getheaders(tvbuff_t *tvb, packet_info *pinfo _U_
   }
 
   proto_tree_add_item(tree, hf_msg_getheaders_stop, tvb, offset, 32, TRUE);
+  return offset + 32;
 }
 
 /**
  * Handler for tx messages
  */
-static void dissect_bitcoin_msg_tx(tvbuff_t *tvb, packet_info *pinfo _U_,
+static guint32 dissect_bitcoin_msg_tx(tvbuff_t *tvb, packet_info *pinfo _U_,
     proto_tree *tree, guint32 offset)
 {
   proto_item *ti;
@@ -495,9 +514,55 @@ static void dissect_bitcoin_msg_tx(tvbuff_t *tvb, packet_info *pinfo _U_,
   }
 
   proto_tree_add_item(tree, hf_msg_tx_lock_time, tvb, offset, 4, TRUE);
+  return offset + 4;
 }
 
-typedef void (*msg_dissector_func_t)(tvbuff_t *tvb, packet_info *pinfo, 
+/**
+ * Handler for block messages
+ */
+static guint32 dissect_bitcoin_msg_block(tvbuff_t *tvb, packet_info *pinfo _U_,
+    proto_tree *tree, guint32 offset)
+{
+  proto_item *ti;
+  gint count_length;
+  guint64 count;
+
+  ti = proto_tree_add_item(tree, hf_bitcoin_msg_block, tvb, offset, -1, FALSE);
+  tree = proto_item_add_subtree(ti, ett_bitcoin_msg);
+
+  proto_tree_add_item(tree, hf_msg_block_version, tvb, offset, 4, TRUE);
+  offset += 4;
+
+  proto_tree_add_item(tree, hf_msg_block_prev_block, tvb, offset, 32, TRUE);
+  offset += 32;
+
+  proto_tree_add_item(tree, hf_msg_block_merkle_root, tvb, offset, 32, TRUE);
+  offset += 32;
+
+  proto_tree_add_item(tree, hf_msg_block_time, tvb, offset, 4, TRUE);
+  offset += 4;
+ 
+  proto_tree_add_item(tree, hf_msg_block_bits, tvb, offset, 4, TRUE);
+  offset += 4;
+
+  proto_tree_add_item(tree, hf_msg_block_nonce, tvb, offset, 4, TRUE);
+  offset += 4;
+ 
+  count = tvb_get_varint(tvb, offset, &count_length);
+  proto_tree_add_text(tree, tvb, offset, count_length, 
+      "Number of transaction: %llu", (long long unsigned int)count); 
+  offset += count_length;
+
+  for(; count > 0; count--)
+  {
+    offset = dissect_bitcoin_msg_tx(tvb, pinfo, tree, offset);
+  }
+
+  return offset;
+}
+
+
+typedef guint32 (*msg_dissector_func_t)(tvbuff_t *tvb, packet_info *pinfo, 
     proto_tree *tree, guint32 offset);
 
 typedef struct msg_dissector
@@ -514,7 +579,8 @@ static msg_dissector_t msg_dissectors[] =
   {"getdata", dissect_bitcoin_msg_getdata},
   {"getblocks", dissect_bitcoin_msg_getblocks},
   {"getheaders", dissect_bitcoin_msg_getheaders},
-  {"tx", dissect_bitcoin_msg_tx}
+  {"tx", dissect_bitcoin_msg_tx},
+  {"block", dissect_bitcoin_msg_block}
 };
 
 static void dissect_bitcoin_tcp_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
@@ -712,6 +778,29 @@ void proto_register_bitoin()
       { "Block lock time or block ID", "bitcoin.tx.lock_time", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
     }, 
 
+    /* block message */
+    { &hf_bitcoin_msg_block,
+      { "Block message", "bitcoin.block", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }
+    },
+    { &hf_msg_block_version,
+      { "Block version", "bitcoin.block.version", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_block_prev_block,
+      { "Previous block", "bitcoin.block.prev_block", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_block_merkle_root,
+      { "Merkle root", "bitcoin.block.merkle_root", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_block_time,
+      { "Block timestamp", "bitcoin.block.timestamp", FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x0, NULL, HFILL }
+    },
+    { &hf_msg_block_bits,
+      { "Bits", "bitcoin.block.merkle_root", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_block_nonce,
+      { "Nonce", "bitcoin.block.nonce", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }
+    }, 
+
     /* services */
     { &hf_services_network,
       { "Network node", "bitcoin.services.network", FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x1, NULL, HFILL }
@@ -741,7 +830,7 @@ void proto_register_bitoin()
     &ett_getheaders_list,
     &ett_tx_in_list,
     &ett_tx_in_outp,
-    &ett_tx_out_list
+    &ett_tx_out_list,
   };
 
   proto_bitcoin = proto_register_protocol( "Bitcoin protocol", "Bitcoin",
