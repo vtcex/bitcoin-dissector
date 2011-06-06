@@ -1,0 +1,10 @@
+--- epan/dissectors/Makefile.common.orig  2011-06-06 10:07:12.200023738 +0200
++++ epan/dissectors/Makefile.common 2011-06-05 14:01:15.792220405 +0200
+@@ -274,6 +274,7 @@
+  packet-ber.c    \
+  packet-bfd.c    \
+  packet-bgp.c    \
++ packet-bitcoin.c    \
+  packet-bittorrent.c   \
+  packet-bjnp.c   \
+  packet-bmc.c    \

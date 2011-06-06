@@ -1,0 +1,7 @@
+In order to compile this, do:
+
+* Download wireshark sources, (I used 1.6.0rc2)
+* cp ~/bitcoin-dissector/packet-bitcoin.c ~/wireshark-1.6.0rc2/epan/dissectors/
+* cd ~/wireshark-1.6.0rc2
+* patch -p0 < ~/bitcoin-dissector/wireshark-make.patch
+* make
