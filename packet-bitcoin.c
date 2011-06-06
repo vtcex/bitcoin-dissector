@@ -63,6 +63,20 @@ static gint hf_bitcoin_msg_getheaders = -1;
 static gint hf_msg_getheaders_start = -1;
 static gint hf_msg_getheaders_stop = -1;
 
+/* tx message */
+static gint hf_bitcoin_msg_tx = -1;
+static gint hf_msg_tx_version = -1;
+static gint hf_msg_tx_in = -1;
+static gint hf_msg_tx_in_prev_output = -1;
+static gint hf_msg_tx_in_sig_script = -1;
+static gint hf_msg_tx_in_seq = -1;
+static gint hf_msg_tx_outp_hash = -1;
+static gint hf_msg_tx_outp_index = -1;
+static gint hf_msg_tx_out = -1;
+static gint hf_msg_tx_out_value = -1;
+static gint hf_msg_tx_out_script = -1;
+static gint hf_msg_tx_lock_time = -1;
+
 /* services */
 static gint hf_services_network = -1;
 
@@ -81,6 +95,9 @@ static gint ett_inv_list = -1;
 static gint ett_getdata_list = -1;
 static gint ett_getblocks_list = -1;
 static gint ett_getheaders_list = -1;
+static gint ett_tx_in_list = -1;
+static gint ett_tx_in_outp = -1;
+static gint ett_tx_out_list = -1;
 
 static const value_string inv_types[] =
 {
@@ -397,6 +414,89 @@ static void dissect_bitcoin_msg_getheaders(tvbuff_t *tvb, packet_info *pinfo _U_
   proto_tree_add_item(tree, hf_msg_getheaders_stop, tvb, offset, 32, TRUE);
 }
 
+/**
+ * Handler for tx messages
+ */
+static void dissect_bitcoin_msg_tx(tvbuff_t *tvb, packet_info *pinfo _U_,
+    proto_tree *tree, guint32 offset)
+{
+  proto_item *ti;
+  gint count_length;
+  guint64 in_count;
+  guint64 out_count;
+
+  ti = proto_tree_add_item(tree, hf_bitcoin_msg_tx, tvb, offset, -1, FALSE);
+  tree = proto_item_add_subtree(ti, ett_bitcoin_msg);
+ 
+  proto_tree_add_item(tree, hf_msg_tx_version, tvb, offset, 4, TRUE);
+  offset += 4;
+ 
+  in_count = tvb_get_varint(tvb, offset, &count_length);
+  proto_tree_add_text(tree, tvb, offset, count_length, 
+      "Input count: %llu", (long long unsigned int)in_count); 
+  offset += count_length;
+
+  for(; in_count > 0; in_count--)
+  {
+    proto_tree *subtree;
+    proto_tree *prevtree;
+    proto_item *pti;
+    guint64 script_length;
+
+    script_length = tvb_get_varint(tvb, offset+36, &count_length);
+
+    ti = proto_tree_add_item(tree, hf_msg_tx_in, tvb, offset, 
+        40+count_length+script_length, FALSE);
+    subtree = proto_item_add_subtree(ti, ett_tx_in_list);
+
+    /* previous output */
+    pti = proto_tree_add_item(subtree, hf_msg_tx_in_prev_output, tvb, offset, 36, TRUE);
+    prevtree = proto_item_add_subtree(pti, ett_tx_in_outp);
+
+    proto_tree_add_item(prevtree, hf_msg_tx_outp_hash, tvb, offset, 32, TRUE);
+    offset += 32;
+    
+    proto_tree_add_item(prevtree, hf_msg_tx_outp_index, tvb, offset, 4, TRUE);
+    offset += 4;
+    /* end previous output */
+
+    offset += count_length;
+
+    proto_tree_add_item(subtree, hf_msg_tx_in_sig_script, tvb, offset, script_length, TRUE);
+    offset += script_length;
+
+    proto_tree_add_item(subtree, hf_msg_tx_in_seq, tvb, offset, 4, TRUE);
+    offset += 4;
+  }
+
+  out_count = tvb_get_varint(tvb, offset, &count_length);
+  proto_tree_add_text(tree, tvb, offset, count_length, 
+      "Output count: %llu", (long long unsigned int)out_count); 
+  offset += count_length;
+
+  for(; out_count > 0; out_count--)
+  {
+    proto_tree *subtree;
+    guint64 script_length;
+
+    script_length = tvb_get_varint(tvb, offset+8, &count_length);
+
+    ti = proto_tree_add_item(tree, hf_msg_tx_out, tvb, offset, 
+        8+script_length+count_length, FALSE);
+    subtree = proto_item_add_subtree(ti, ett_tx_out_list);
+
+    proto_tree_add_item(subtree, hf_msg_tx_out_value, tvb, offset, 8, TRUE);
+    offset += 8;
+
+    offset += count_length;
+
+    proto_tree_add_item(subtree, hf_msg_tx_out_script, tvb, offset, script_length, TRUE);
+    offset += script_length;
+  }
+
+  proto_tree_add_item(tree, hf_msg_tx_lock_time, tvb, offset, 4, TRUE);
+}
+
 typedef void (*msg_dissector_func_t)(tvbuff_t *tvb, packet_info *pinfo, 
     proto_tree *tree, guint32 offset);
 
@@ -413,7 +513,8 @@ static msg_dissector_t msg_dissectors[] =
   {"inv", dissect_bitcoin_msg_inv},
   {"getdata", dissect_bitcoin_msg_getdata},
   {"getblocks", dissect_bitcoin_msg_getblocks},
-  {"getheaders", dissect_bitcoin_msg_getheaders}
+  {"getheaders", dissect_bitcoin_msg_getheaders},
+  {"tx", dissect_bitcoin_msg_tx}
 };
 
 static void dissect_bitcoin_tcp_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
@@ -571,6 +672,45 @@ void proto_register_bitoin()
       { "Stopping hash", "bitcoin.getheaders.hash_stop", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }
     }, 
 
+    /* tx message */
+    { &hf_bitcoin_msg_tx,
+      { "Tx message", "bitcoin.tx", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }
+    },
+    { &hf_msg_tx_version,
+      { "Transaction version", "bitcoin.tx.version", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
+    }, 
+    /* tx message - input */
+    { &hf_msg_tx_in,
+      { "Transaction input", "bitcoin.tx.in", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_tx_in_prev_output,
+      { "Previous output", "bitcoin.tx.in.prev_output", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_tx_outp_hash,
+      { "Hash", "bitcoin.tx.in.prev_output.hash", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_tx_outp_index,
+      { "Index", "bitcoin.tx.in.prev_output.index", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_tx_in_sig_script,
+      { "Signature script", "bitcoin.tx.in.sig_script", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_tx_in_seq,
+      { "Sequence", "bitcoin.tx.in.seq", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
+    }, 
+    /* tx message - output */ 
+    { &hf_msg_tx_out,
+      { "Transaction output", "bitcoin.tx.out", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_tx_out_value,
+      { "Value", "bitcoin.tx.out.value", FT_UINT64, BASE_DEC, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_tx_out_script,
+      { "Script", "bitcoin.tx.out.script", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }
+    }, 
+    { &hf_msg_tx_lock_time,
+      { "Block lock time or block ID", "bitcoin.tx.lock_time", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }
+    }, 
 
     /* services */
     { &hf_services_network,
@@ -598,7 +738,10 @@ void proto_register_bitoin()
     &ett_inv_list,
     &ett_getdata_list,
     &ett_getblocks_list,
-    &ett_getheaders_list
+    &ett_getheaders_list,
+    &ett_tx_in_list,
+    &ett_tx_in_outp,
+    &ett_tx_out_list
   };
 
   proto_bitcoin = proto_register_protocol( "Bitcoin protocol", "Bitcoin",
