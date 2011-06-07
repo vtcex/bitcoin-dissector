@@ -153,7 +153,7 @@ static const value_string inv_types[] =
 
 static value_string_ext inv_type_ext = VALUE_STRING_EXT_INIT(inv_types);
 
-#define CHECK_BOUNDS(ti,size,name) \
+#define BTC_CHECK_BOUNDS(ti,size,name) \
   if((guint64)tvb_reported_length_remaining(tvb, offset) < size)\
   { \
     expert_add_info_format(pinfo,ti, PI_MALFORMED, PI_ERROR, \
@@ -162,10 +162,10 @@ static value_string_ext inv_type_ext = VALUE_STRING_EXT_INIT(inv_types);
     return -1; \
   } 
 
-#define CHECK_LOOP(ti,size,cnt,name) \
-  CHECK_BOUNDS(ti,(size)*(cnt),name)
+#define BTC_CHECK_LOOP(ti,size,cnt,name) \
+  BTC_CHECK_BOUNDS(ti,(size)*(cnt),name)
 
-#define CHECK_VARINT(rti,ret) \
+#define BTC_CHECK_VARINT(rti,ret) \
   if(ret < 0) \
   { \
     expert_add_info_format(pinfo,rti, PI_MALFORMED, PI_ERROR, \
@@ -299,7 +299,7 @@ static guint32 dissect_bitcoin_msg_version(tvbuff_t *tvb, packet_info *pinfo _U_
   ti = proto_tree_add_item(tree, hf_bitcoin_msg_version, tvb, offset, -1, FALSE);
   tree = proto_item_add_subtree(ti, ett_bitcoin_msg);
 
-  CHECK_BOUNDS(ti, 4+8+8+26, "Version header");
+  BTC_CHECK_BOUNDS(ti, 4+8+8+26, "Version header");
 
   version = tvb_get_letohl(tvb, offset);
 
@@ -319,7 +319,7 @@ static guint32 dissect_bitcoin_msg_version(tvbuff_t *tvb, packet_info *pinfo _U_
 
   if(version >= 106)
   {
-    CHECK_BOUNDS(ti, 26+8+1, "Version header (version >= 106)");
+    BTC_CHECK_BOUNDS(ti, 26+8+1, "Version header (version >= 106)");
 
     ti = proto_tree_add_item(tree, hf_msg_version_addr_you, tvb, offset, 26, TRUE); 
     create_address_tree(tvb, ti, offset);
@@ -336,7 +336,7 @@ static guint32 dissect_bitcoin_msg_version(tvbuff_t *tvb, packet_info *pinfo _U_
 
     if(version >= 209)
     {
-      CHECK_BOUNDS(ti, 4, "Version header (version >= 209)");
+      BTC_CHECK_BOUNDS(ti, 4, "Version header (version >= 209)");
       proto_tree_add_item(tree, hf_msg_version_start_height, tvb, offset, 4, TRUE); 
       offset += 4;
     }
@@ -359,12 +359,12 @@ static guint32 dissect_bitcoin_msg_addr(tvbuff_t *tvb, packet_info *pinfo _U_,
   ti = proto_tree_add_item(tree, hf_bitcoin_msg_addr, tvb, offset, -1, FALSE);
   tree = proto_item_add_subtree(ti, ett_bitcoin_msg);
   
-  CHECK_VARINT(ti, get_varint(tvb, offset, &count_length, &count));
+  BTC_CHECK_VARINT(ti, get_varint(tvb, offset, &count_length, &count));
   proto_tree_add_text(tree, tvb, offset, count_length, 
       "Count: %" G_GINT64_MODIFIER "u", count); 
   offset += count_length;
 
-  CHECK_LOOP(ti, 30, count, "Address array bounds");
+  BTC_CHECK_LOOP(ti, 30, count, "Address array bounds");
 
   for(; count > 0; count--)
   {
@@ -395,12 +395,12 @@ static guint32 dissect_bitcoin_msg_inv(tvbuff_t *tvb, packet_info *pinfo _U_,
   ti = proto_tree_add_item(tree, hf_bitcoin_msg_inv, tvb, offset, -1, FALSE);
   tree = proto_item_add_subtree(ti, ett_bitcoin_msg);
   
-  CHECK_VARINT(ti, get_varint(tvb, offset, &count_length, &count));
+  BTC_CHECK_VARINT(ti, get_varint(tvb, offset, &count_length, &count));
   proto_tree_add_text(tree, tvb, offset, count_length, 
       "Count: %" G_GINT64_MODIFIER "u", count); 
   offset += count_length;
 
-  CHECK_LOOP(ti, 36, count, "Inventory array bounds");
+  BTC_CHECK_LOOP(ti, 36, count, "Inventory array bounds");
 
   for(; count > 0; count--)
   {
@@ -433,12 +433,12 @@ static guint32 dissect_bitcoin_msg_getdata(tvbuff_t *tvb, packet_info *pinfo _U_
   ti = proto_tree_add_item(tree, hf_bitcoin_msg_getdata, tvb, offset, -1, FALSE);
   tree = proto_item_add_subtree(ti, ett_bitcoin_msg);
  
-  CHECK_VARINT(ti, get_varint(tvb, offset, &count_length, &count));
+  BTC_CHECK_VARINT(ti, get_varint(tvb, offset, &count_length, &count));
   proto_tree_add_text(tree, tvb, offset, count_length, 
       "Count: %" G_GINT64_MODIFIER "u", count); 
   offset += count_length;
 
-  CHECK_LOOP(ti, 36, count, "Inventory array bounds");
+  BTC_CHECK_LOOP(ti, 36, count, "Inventory array bounds");
 
   for(; count > 0; count--)
   {
@@ -471,18 +471,18 @@ static guint32 dissect_bitcoin_msg_getblocks(tvbuff_t *tvb, packet_info *pinfo _
   ti = proto_tree_add_item(tree, hf_bitcoin_msg_getblocks, tvb, offset, -1, FALSE);
   tree = proto_item_add_subtree(ti, ett_bitcoin_msg);
   
-  CHECK_BOUNDS(ti, 5, "Getblocks message");
+  BTC_CHECK_BOUNDS(ti, 5, "Getblocks message");
 
   /* why the protcol version is sent here nobody knows */
   proto_tree_add_item(tree, hf_msg_version_version, tvb, offset, 4, TRUE); 
   offset += 4;
 
-  CHECK_VARINT(ti, get_varint(tvb, offset, &count_length, &count));
+  BTC_CHECK_VARINT(ti, get_varint(tvb, offset, &count_length, &count));
   proto_tree_add_text(tree, tvb, offset, count_length, 
       "Count: %" G_GINT64_MODIFIER "u", count); 
   offset += count_length;
 
-  CHECK_LOOP(ti, 32, count, "Blocks array bounds");
+  BTC_CHECK_LOOP(ti, 32, count, "Blocks array bounds");
 
   for(; count > 0; count--)
   {
@@ -490,7 +490,7 @@ static guint32 dissect_bitcoin_msg_getblocks(tvbuff_t *tvb, packet_info *pinfo _
     offset += 32;
   }
 
-  CHECK_BOUNDS(ti, 32, "Stop block");
+  BTC_CHECK_BOUNDS(ti, 32, "Stop block");
 
   proto_tree_add_item(tree, hf_msg_getblocks_stop, tvb, offset, 32, TRUE);
   return offset + 32;
@@ -511,19 +511,19 @@ static guint32 dissect_bitcoin_msg_getheaders(tvbuff_t *tvb, packet_info *pinfo 
   ti = proto_tree_add_item(tree, hf_bitcoin_msg_getheaders, tvb, offset, -1, FALSE);
   tree = proto_item_add_subtree(ti, ett_bitcoin_msg);
   
-  CHECK_VARINT(ti, get_varint(tvb, offset, &count_length, &count));
+  BTC_CHECK_VARINT(ti, get_varint(tvb, offset, &count_length, &count));
   proto_tree_add_text(tree, tvb, offset, count_length, 
       "Count: %" G_GINT64_MODIFIER "u", count); 
   offset += count_length;
 
-  CHECK_LOOP(ti, 32, count, "Blocks array bounds");
+  BTC_CHECK_LOOP(ti, 32, count, "Blocks array bounds");
   for(; count > 0; count--)
   {
     proto_tree_add_item(tree, hf_msg_getheaders_start, tvb, offset, 32, TRUE);
     offset += 32;
   }
 
-  CHECK_BOUNDS(ti, 32, "Stop block");
+  BTC_CHECK_BOUNDS(ti, 32, "Stop block");
   proto_tree_add_item(tree, hf_msg_getheaders_stop, tvb, offset, 32, TRUE);
   return offset + 32;
 }
@@ -543,17 +543,17 @@ static guint32 dissect_bitcoin_msg_tx(tvbuff_t *tvb, packet_info *pinfo _U_,
   rti = proto_tree_add_item(tree, hf_bitcoin_msg_tx, tvb, offset, -1, FALSE);
   tree = proto_item_add_subtree(rti, ett_bitcoin_msg);
 
-  CHECK_BOUNDS(rti, 4, "Tx version");
+  BTC_CHECK_BOUNDS(rti, 4, "Tx version");
  
   proto_tree_add_item(tree, hf_msg_tx_version, tvb, offset, 4, TRUE);
   offset += 4;
  
-  CHECK_VARINT(rti, get_varint(tvb, offset, &count_length, &in_count));
+  BTC_CHECK_VARINT(rti, get_varint(tvb, offset, &count_length, &in_count));
   proto_tree_add_text(tree, tvb, offset, count_length, 
       "Input count: %" G_GINT64_MODIFIER "u", in_count); 
   offset += count_length;
 
-  CHECK_LOOP(rti, 41, in_count, "Transaction input array")
+  BTC_CHECK_LOOP(rti, 41, in_count, "Transaction input array")
 
   for(; in_count > 0; in_count--)
   {
@@ -563,8 +563,8 @@ static guint32 dissect_bitcoin_msg_tx(tvbuff_t *tvb, packet_info *pinfo _U_,
     proto_item *pti;
     guint64 script_length;
 
-    CHECK_VARINT(rti, get_varint(tvb, offset+36, &count_length, &script_length));
-    CHECK_BOUNDS(rti, 40 + count_length + script_length, "Transaction input");
+    BTC_CHECK_VARINT(rti, get_varint(tvb, offset+36, &count_length, &script_length));
+    BTC_CHECK_BOUNDS(rti, 40 + count_length + script_length, "Transaction input");
 
     ti = proto_tree_add_item(tree, hf_msg_tx_in, tvb, offset, 
         40+count_length+script_length, FALSE);
@@ -590,12 +590,12 @@ static guint32 dissect_bitcoin_msg_tx(tvbuff_t *tvb, packet_info *pinfo _U_,
     offset += 4;
   }
 
-  CHECK_VARINT(rti, get_varint(tvb, offset, &count_length, &out_count));
+  BTC_CHECK_VARINT(rti, get_varint(tvb, offset, &count_length, &out_count));
   proto_tree_add_text(tree, tvb, offset, count_length, 
       "Output count: %" G_GINT64_MODIFIER "u", out_count); 
   offset += count_length;
 
-  CHECK_LOOP(rti, 9, out_count, "Transaction output array")
+  BTC_CHECK_LOOP(rti, 9, out_count, "Transaction output array")
 
   for(; out_count > 0; out_count--)
   {
@@ -603,9 +603,9 @@ static guint32 dissect_bitcoin_msg_tx(tvbuff_t *tvb, packet_info *pinfo _U_,
     proto_tree *subtree;
     guint64 script_length;
 
-    CHECK_VARINT(rti, get_varint(tvb, offset+8, &count_length, &script_length));
+    BTC_CHECK_VARINT(rti, get_varint(tvb, offset+8, &count_length, &script_length));
 
-    CHECK_BOUNDS(rti, 8 + count_length + script_length, "Transaction output");
+    BTC_CHECK_BOUNDS(rti, 8 + count_length + script_length, "Transaction output");
 
     ti = proto_tree_add_item(tree, hf_msg_tx_out, tvb, offset, 
         8+script_length+count_length, FALSE);
@@ -620,7 +620,7 @@ static guint32 dissect_bitcoin_msg_tx(tvbuff_t *tvb, packet_info *pinfo _U_,
     offset += script_length;
   }
 
-  CHECK_BOUNDS(rti, 4, "Block lock");
+  BTC_CHECK_BOUNDS(rti, 4, "Block lock");
 
   proto_tree_add_item(tree, hf_msg_tx_lock_time, tvb, offset, 4, TRUE);
   offset += 4;
@@ -663,7 +663,7 @@ static guint32 dissect_bitcoin_msg_block(tvbuff_t *tvb, packet_info *pinfo _U_,
   proto_tree_add_item(tree, hf_msg_block_nonce, tvb, offset, 4, TRUE);
   offset += 4;
  
-  CHECK_VARINT(ti, get_varint(tvb, offset, &count_length, &count));
+  BTC_CHECK_VARINT(ti, get_varint(tvb, offset, &count_length, &count));
   proto_tree_add_text(tree, tvb, offset, count_length, 
       "Number of transaction: %" G_GINT64_MODIFIER "u", count); 
   offset += count_length;
